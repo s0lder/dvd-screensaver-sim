@@ -1,11 +1,9 @@
 #version 330 core
-layout (position = 0) in vec3 a_pos;
-layout (position = 1) in vec3 a_color;
+layout (location = 0) in vec3 a_pos;
 
-out vec3 vertex_color;
+uniform vec2 velocity;
 
 void main()
 {
-    vertex_color = a_color;
-    gl_Position = vec4(a_pos, 1.0);
+    gl_Position = vec4(a_pos.x + velocity.x, a_pos.y + velocity.y, a_pos.z, 1.0);
 }
