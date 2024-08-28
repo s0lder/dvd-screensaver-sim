@@ -3,6 +3,7 @@
 
 #include <random>
 #include <thread>
+#include <atomic>
 
 #include "Shader.h"
 
@@ -11,6 +12,15 @@ const unsigned int kScrWidth = 800;
 const unsigned int kScrHeight = 600;
 
 void FramebufferSizeCallback(GLFWwindow* window, int width, int height);
+void LogicLoop(
+	std::atomic<float>& x_pos,
+	std::atomic<float>& y_pos,
+	std::atomic<float>& x_vel,
+	std::atomic<float>& y_vel,
+	Shader& shader);
+
+std::atomic<bool> running(true);
+std::atomic<bool> collided_flag(false);
 
 // TODO: implement multithreaded approach to rendering/logic
 int main()
@@ -86,56 +96,49 @@ int main()
 	std::mt19937 rng;
 	std::uniform_real_distribution<> vel_dist(0.3, 0.5), RGB_dist(0, 1);
 
-	float x_pos = 0.0f, y_pos = 0.0f;
-	float x_vel = vel_dist(rng), y_vel = vel_dist(rng);
-	double prev_time = glfwGetTime();
+	// shared state variables
+	std::atomic<float> x_pos = 0.0f, y_pos = 0.0f;
+	std::atomic<float> x_vel = vel_dist(rng), y_vel = vel_dist(rng);
 
-	// graphics loop
-	// -------------
+	// Launch rendering loop in a separate thread
+	std::thread logic_thread(
+		LogicLoop,
+		std::ref(x_pos),
+		std::ref(y_pos),
+		std::ref(x_vel),
+		std::ref(y_vel),
+		std::ref(shader)
+	);
+
+	// rendering loop
+	// ----------
 	while (!glfwWindowShouldClose(window))
 	{
 		glClear(GL_COLOR_BUFFER_BIT);
 
-		double curr_time = glfwGetTime();
-		double dt = curr_time - prev_time;
-		prev_time = curr_time;
-
-		// rendering
-		// ---------
-		// update position
-		x_pos += x_vel * dt;
-		y_pos += y_vel * dt;
-
-		float collided = false;
-		if (x_pos - 0.2f <= -1.0f || x_pos + 0.2f >= 1.0f)
-		{
-			x_vel = -x_vel;
-			collided = true;
-		}
-		if (y_pos - 0.2f <= -1.0f || y_pos + 0.2f >= 1.0f)
-		{
-			y_vel = -y_vel;
-			collided = true;
-		}
-
 		shader.Use();
-		glUniform2f(glGetUniformLocation(shader.ID, "velocity"), x_pos, y_pos);
-
-		if (collided)
+		glUniform2f(glGetUniformLocation(shader.ID, "velocity"), x_pos.load(), y_pos.load());
+		if (collided_flag.load())
 		{
 			float red = RGB_dist(rng);
 			float green = RGB_dist(rng);
 			float blue = RGB_dist(rng);
 			glUniform3f(glGetUniformLocation(shader.ID, "u_color"), red, green, blue);
+			collided_flag.store(false);
 		}
-		
+
 		glBindVertexArray(VAO);
 		glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
 
-		// process events and swap buffers
+		// swap buffers and process events
 		glfwSwapBuffers(window);
 		glfwPollEvents();
 	}
+	// signal the logic thread to stop
+	running = false;
+	
+	// sync threads
+	logic_thread.join();
 
 	// de-allocate all resources
 	shader.Delete();
@@ -150,4 +153,43 @@ int main()
 void FramebufferSizeCallback(GLFWwindow* window, int width, int height)
 {
 	glViewport(0, 0, width, height);
+}
+
+void LogicLoop(
+	std::atomic<float>& x_pos, 
+	std::atomic<float>& y_pos,
+    std::atomic<float>& x_vel, 
+	std::atomic<float>& y_vel,
+	Shader& shader)
+{
+	float prev_time = glfwGetTime();
+
+	while (running)
+	{
+		float curr_time = glfwGetTime();
+		float dt = curr_time - prev_time;
+		prev_time = curr_time;
+
+		// update position
+		x_pos.fetch_add(x_vel * dt);
+		y_pos.fetch_add(y_vel * dt);
+
+		bool collided = false;
+		float curr_x = x_pos.load();
+		float curr_y = y_pos.load();
+
+		if (curr_x - 0.2f <= -1.0f || curr_x + 0.2f >= 1.0f)
+		{
+			x_vel = -x_vel;
+			collided = true;
+		}
+		if (curr_y - 0.2f <= -1.0f || curr_y + 0.2f >= 1.0f)
+		{
+			y_vel = -y_vel;
+			collided = true;
+		}
+
+		if (collided)
+			collided_flag.store(true);
+	}
 }
