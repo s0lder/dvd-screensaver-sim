@@ -6,6 +6,7 @@
 #include <atomic>
 
 #include "Shader.h"
+#include "stb_image.h"
 
 // settings
 const unsigned int kScrWidth = 800;
@@ -62,11 +63,12 @@ int main()
 	Shader shader("./vertex.glsl", "./fragment.glsl");
 
 	// Vertex data
-	float vertices[12] = {
-		0.2f,  0.2f, 0.0f,   // top right
-		0.2f, -0.2f, 0.0f,   // bottom right
-	   -0.2f, -0.2f, 0.0f,   // bottom left
-	   -0.2f,  0.2f, 0.0f,   // top left
+	float vertices[20] = {
+		// positions        // texture coords
+		0.2f,  0.2f, 0.0f,  1.0f, 1.0f,             // top right
+		0.2f, -0.2f, 0.0f,  1.0f, 0.0f,             // bottom right
+	   -0.2f, -0.2f, 0.0f,  0.0f, 0.0f,             // bottom left
+	   -0.2f,  0.2f, 0.0f,  0.0f, 1.0f              // top left
 	};
 
 	unsigned int indices[6] = {
@@ -90,11 +92,41 @@ int main()
 	glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
 
 	// set and enable vertex attributes pointers
-	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
+	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)0);
 	glEnableVertexAttribArray(0);
+	glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void*)(3 * sizeof(float)));
+	glEnableVertexAttribArray(1);
+
+	// load and generate texture and mipmaps
+	unsigned int texture;
+	glGenTextures(1, &texture);
+	glActiveTexture(GL_TEXTURE0);
+	glBindTexture(GL_TEXTURE_2D, texture);
+
+	// texture wrapping/filtering options
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+	int width, height, num_channels;
+
+	stbi_set_flip_vertically_on_load(true);
+	unsigned char* data = stbi_load("./dvd_logo_no_bg.png", &width, &height, &num_channels, 0);
+	
+	if (data)
+	{
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGBA, GL_UNSIGNED_BYTE, data);
+		glGenerateMipmap(GL_TEXTURE_2D);
+	}
+	else std::cout << "Failed to load texture" << std::endl;
+
+	// free image memory
+
+	stbi_image_free(data);
 
 	std::mt19937 rng;
-	std::uniform_real_distribution<> vel_dist(0.3, 0.5), RGB_dist(0, 1);
+	std::uniform_real_distribution<> vel_dist(0.3, 0.5), RGB_dist(0.2, 1);
 
 	// shared state variables
 	std::atomic<float> x_pos = 0.0f, y_pos = 0.0f;
@@ -110,13 +142,17 @@ int main()
 		std::ref(shader)
 	);
 
+	bool collided_once = false;
 	// rendering loop
-	// ----------
 	while (!glfwWindowShouldClose(window))
 	{
 		glClear(GL_COLOR_BUFFER_BIT);
 
 		shader.Use();
+
+		if (!collided_once)
+			glUniform3f(glGetUniformLocation(shader.ID, "u_color"), 1.0f, 1.0f, 1.0f);
+
 		glUniform2f(glGetUniformLocation(shader.ID, "velocity"), x_pos.load(), y_pos.load());
 		if (collided_flag.load())
 		{
@@ -125,6 +161,7 @@ int main()
 			float blue = RGB_dist(rng);
 			glUniform3f(glGetUniformLocation(shader.ID, "u_color"), red, green, blue);
 			collided_flag.store(false);
+			collided_once = true;
 		}
 
 		glBindVertexArray(VAO);
