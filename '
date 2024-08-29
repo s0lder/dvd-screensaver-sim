@@ -144,6 +144,7 @@ int main()
 	);
 
 	bool collided_once = false;
+	bool rainbow_toggle = false;
 	// rendering loop
 	while (!glfwWindowShouldClose(window))
 	{
@@ -160,7 +161,7 @@ int main()
 			if (corner_flag.load())
 			{
 				glUniform3f(glGetUniformLocation(shader.ID, "u_color"), 0.0f, 0.0f, 0.0f);
-				corner_flag.store(false);
+				rainbow_toggle = true;
 			}
 			else
 			{
@@ -170,6 +171,7 @@ int main()
 				glUniform3f(glGetUniformLocation(shader.ID, "u_color"), red, green, blue);
 				collided_flag.store(false);
 				collided_once = true;
+				rainbow_toggle = false;
 			}
 		}
 
@@ -208,7 +210,7 @@ void LogicLoop(
 	std::atomic<float>& y_vel)
 {
 	const float debounce_time = 0.1f;
-	float last_collision_time = 0.0f;
+	float last_collision_time;
 
 	float prev_time = glfwGetTime();
 
@@ -229,20 +231,16 @@ void LogicLoop(
 
 		bool hit_horizontal = curr_x - 0.2f <= -1.0f || curr_x + 0.2f >= 1.0f;
 		bool hit_vertical = curr_y - 0.2f <= -1.0f || curr_y + 0.2f >= 1.0f;
-		bool is_in_debounce_range = curr_time - last_collision_time > debounce_time;
 
-		if (is_in_debounce_range)
+		if (hit_horizontal && (curr_time - last_collision_time > ))
 		{
-			if (hit_horizontal)
-			{
-				x_vel = -x_vel;
-				collided = true;
-			}
-			if (hit_vertical)
-			{
-				y_vel = -y_vel;
-				collided = true;
-			}
+			x_vel = -x_vel;
+			collided = true;
+		}
+		if (hit_vertical)
+		{
+			y_vel = -y_vel;
+			collided = true;
 		}
 
 		if (hit_horizontal && hit_vertical)
