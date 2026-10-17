@@ -23,7 +23,6 @@ std::atomic<bool> running(true);
 std::atomic<bool> collided_flag(false);
 std::atomic<bool> corner_flag(false);
 
-// TODO: implement multithreaded approach to rendering/logic
 int main()
 {
 	// GLFW and GLAD setup
